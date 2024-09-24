@@ -1,6 +1,13 @@
 python main.py --base configs/autoencoder/autoencoder_kl_8x8x64.yaml -t --gpus 0,    
 
 
+# Info
+This is a fork of https://github.com/CompVis/latent-diffusion, where I updated the code to run on new pytorch and pytorch-lightning versions
+
+Intended for pixel 2 pixel conditioning
+
+
+
 # Latent Diffusion Models
 [arXiv](https://arxiv.org/abs/2112.10752) | [BibTeX](#bibtex)
 [**High-Resolution Image Synthesis with Latent Diffusion Models**](https://arxiv.org/abs/2112.10752)<br/>
