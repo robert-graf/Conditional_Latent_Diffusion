@@ -1,0 +1,11 @@
+*.pyc
+*.pth
+*.ckpt
+*.yaml
+*.png
+logs
+src
+
+lightning_logs
+logs_copy
+*tfevents*
