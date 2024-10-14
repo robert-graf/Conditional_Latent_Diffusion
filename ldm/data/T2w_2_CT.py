@@ -92,12 +92,17 @@ class ImageSR(Dataset):
         self.padding = padding
         self.condition_types = ["T2", "CT"]
 
-    def load_file(self, name):
+    def load_file(self, i):
+        name = self.file_list[i % len(self.file_list)]
         dict_mods = {}
         if name.endswith(".npz"):
             f = np.load(name)
             for k, v in f.items():  # type: ignore
                 dict_mods[k] = v.astype("f")
+                if dict_mods[k].sum() <= 5:
+                    self.file_list.remove(i)
+                    print("Remove empty image", i, name)
+                    return self.load_file(i + 123)
                 if self.norm:
                     dict_mods[k] /= max(float(np.max(dict_mods[k])), 0.0000001)
             f.close()  # type: ignore
@@ -119,7 +124,7 @@ class ImageSR(Dataset):
         return img_data
 
     @torch.no_grad()
-    def transform(self, dict_mods):
+    def transform(self, dict_mods, flip):
         condition_types = self.condition_types
         if len(condition_types) == 1:
             key = condition_types[0]
@@ -143,9 +148,11 @@ class ImageSR(Dataset):
             elif self.mri_transform is not None:
                 img = self.mri_transform(torch.cat([img, img, img], dim=0))[1:2]  # type: ignore
             second_img_list.append(img)  # type: ignore
-
         if self.image_dropout > 0 and self.train and self.image_dropout > random.random():
-            second_img_list[0] = second_img_list[0] * 0
+            if not flip:
+                second_img_list[0] = second_img_list[0] * 0
+            else:
+                target = target * 0
         for _, i in enumerate(second_img_list):
             assert second_img_list[0].shape == i.shape, f"Shape mismatch {second_img_list[0].shape} {i.shape} "
 
@@ -186,8 +193,8 @@ class ImageSR(Dataset):
     def __getitem__(self, i):
         flip = len(self.file_list) > i
 
-        dict_mods = self.load_file(self.file_list[i % len(self.file_list)])
-        target, condition = self.transform(dict_mods)
+        dict_mods = self.load_file(i)
+        target, condition = self.transform(dict_mods, flip)
         if flip:
             a = condition
             condition = target

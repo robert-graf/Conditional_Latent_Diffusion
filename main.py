@@ -173,7 +173,6 @@ if __name__ == "__main__":
         # config.model["params"]["ckpt_path"] = "logs/2024-09-03T08-58-26_nako/checkpoints/last.ckpt"
         # model
         model = instantiate_from_config(config.model)
-
         # trainer and callbacks
         trainer_kwargs = {}
         default_config(trainer_kwargs, lightning_config, ckptdir)
