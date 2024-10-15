@@ -1,7 +1,7 @@
 *.pyc
 *.pth
 *.ckpt
-*.yaml
+#*.yaml
 *.png
 logs
 src
@@ -9,3 +9,4 @@ src
 lightning_logs
 logs_copy
 *tfevents*
+logs copy
