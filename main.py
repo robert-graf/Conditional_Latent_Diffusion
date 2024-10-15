@@ -147,6 +147,8 @@ if __name__ == "__main__":
     print(Path(logdir).absolute())
     ckptdir = os.path.join(logdir, "checkpoints")
     cfgdir = os.path.join(logdir, "configs")
+    if not os.path.exists(cfgdir):
+        Path(cfgdir).mkdir(exist_ok=True, parents=True)
     seed_everything(opt.seed)
 
     try:
@@ -154,6 +156,7 @@ if __name__ == "__main__":
         configs = [OmegaConf.load(cfg) for cfg in opt.base]
         cli = OmegaConf.from_dotlist(unknown)
         config = OmegaConf.merge(*configs, cli)
+        OmegaConf.save(config, cfgdir + "/config.conf")
         lightning_config = config.pop("lightning", OmegaConf.create())  # type: ignore
         # merge trainer cli with config
         trainer_config = lightning_config.get("trainer", OmegaConf.create())
