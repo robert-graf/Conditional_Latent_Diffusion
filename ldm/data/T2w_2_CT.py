@@ -22,10 +22,15 @@ class ImageSR(Dataset):
         padding="constant",  # constant, edge, reflect or symmetric
         validation=False,
         norm=False,
-        gauss=False,
+        gauss=0,
         image_dropout=0.1,
         vflip=True,
         hflip=True,
+        dflip=False,
+        rotation=None,
+        noise_factor=0,
+        noise=0,
+        blur=0,
     ):
         """
         Super-resolution Dataloader
@@ -88,8 +93,13 @@ class ImageSR(Dataset):
         self.image_dropout = image_dropout
         self.vflip = vflip
         self.hflip = hflip
+        self.dflip = dflip
         self.train = not validation
         self.padding = padding
+        self.rotation = rotation
+        self.blur = blur
+        self.noise = noise
+        self.noise_factor = noise_factor
         self.condition_types = ["T2", "CT"]
 
     def load_file(self, i):
@@ -110,7 +120,7 @@ class ImageSR(Dataset):
         raise AssertionError("Expected a .npz file")
 
     def gauss_filter(self, img_data) -> torch.Tensor | np.ndarray:
-        if self.gauss:
+        if self.gauss > random.random():
             to_tensor = False
             if isinstance(img_data, torch.Tensor):
                 img_data = img_data.detach().cpu().numpy()
@@ -126,6 +136,9 @@ class ImageSR(Dataset):
     @torch.no_grad()
     def transform(self, dict_mods, flip):
         condition_types = self.condition_types
+        if flip:
+            condition_types = [condition_types[-1], *condition_types[:-1]]
+
         if len(condition_types) == 1:
             key = condition_types[0]
             ct = dict_mods[key]  # self.gauss_filter()
@@ -135,33 +148,36 @@ class ImageSR(Dataset):
             condition_types = condition_types[1:]
             target = dict_mods[key]
             target = tf.to_tensor(target)
-        if key not in ("CT", "SG") and self.mri_transform is not None:
-            target = self.mri_transform(torch.cat([target, target, target], dim=0))[1:2]  # type: ignore
+        # if key not in ("CT", "SG") and self.mri_transform is not None:
+        #    target = self.mri_transform(torch.cat([target, target, target], dim=0))[1:2]  # type: ignore
 
-        second_img_list: list[torch.Tensor] = []
+        cond_img_list: list[torch.Tensor] = []
         for key in condition_types:
             img = tf.to_tensor(dict_mods[key])
-            if key == "CT":
+            if key == "CT" or self.gauss != 0:
                 img = self.gauss_filter(img)
             elif key == "SG":
                 pass
             elif self.mri_transform is not None:
                 img = self.mri_transform(torch.cat([img, img, img], dim=0))[1:2]  # type: ignore
-            second_img_list.append(img)  # type: ignore
+            cond_img_list.append(img)  # type: ignore
         if self.image_dropout > 0 and self.train and self.image_dropout > random.random():
-            if not flip:
-                second_img_list[0] = second_img_list[0] * 0
-            else:
-                target = target * 0
-        for _, i in enumerate(second_img_list):
-            assert second_img_list[0].shape == i.shape, f"Shape mismatch {second_img_list[0].shape} {i.shape} "
+            cond_img_list[0] = cond_img_list[0] * 0
+        for _, i in enumerate(cond_img_list):
+            assert cond_img_list[0].shape == i.shape, f"Shape mismatch {cond_img_list[0].shape} {i.shape} "
 
-        second_img = torch.cat(second_img_list, dim=0)
+        second_img = torch.cat(cond_img_list, dim=0)
+
         # Padding
         w, h = target.shape[-2], target.shape[-1]
         hp = max((self.size[0] - w) / 2, 0)
         vp = max((self.size[1] - h) / 2, 0)
         padding = [int(floor(vp)), int(floor(hp)), int(ceil(vp)), int(ceil(hp))]
+
+        if self.rotation:
+            angle = random.uniform(-self.rotation, self.rotation)  # Random rotation within range
+            target = tf.rotate(target, angle, tf.InterpolationMode.BILINEAR)
+            second_img = tf.rotate(second_img, angle)
 
         target = tf.pad(target, padding, padding_mode=self.padding)
         second_img = tf.pad(second_img, padding, padding_mode=self.padding)
@@ -180,7 +196,20 @@ class ImageSR(Dataset):
         if self.vflip and random.random() > 0.5:
             target = tf.vflip(target)
             second_img = tf.vflip(second_img)
+        # Random vertical flipping
+        if self.dflip and random.random() > 0.5:
+            target = target.swapaxes(-1, -2)
+            second_img = second_img.swapaxes(-1, -2)
 
+        if self.blur > random.random():
+            blur_transform = transforms.GaussianBlur(random.choice([3, 5]))
+            target = blur_transform(target)
+            second_img = blur_transform(second_img)
+
+        if self.noise_factor != 0 and random.random() < self.noise:
+            noise = torch.randn_like(target) * self.noise_factor * random.random()
+            target = target + noise * 0.1
+            second_img = second_img + noise
         # Normalize to -1, 1
         target = target * 2 - 1
         second_img = second_img * 2 - 1
@@ -195,10 +224,6 @@ class ImageSR(Dataset):
 
         dict_mods = self.load_file(i)
         target, condition = self.transform(dict_mods, flip)
-        if flip:
-            a = condition
-            condition = target
-            target = a
         example = {"image": target, "LR_image": target, "c_concat": condition, "n_crossattn": condition}
         return example
 
