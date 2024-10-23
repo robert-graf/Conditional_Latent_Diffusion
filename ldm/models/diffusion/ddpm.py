@@ -8,6 +8,7 @@ https://github.com/CompVis/taming-transformers
 
 from contextlib import contextmanager
 from functools import partial
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -85,6 +86,8 @@ class DDPM(pl.LightningModule):
         self.channels = channels
         self.use_positional_encodings = use_positional_encodings
         self.model = DiffusionWrapper(unet_config, conditioning_key)
+        
+        self._buffer_dict ={}
         count_params(self.model, verbose=True)
         self.use_ema = use_ema
         if self.use_ema:
@@ -330,7 +333,47 @@ class DDPM(pl.LightningModule):
             self.log("lr_abs", lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
         return loss
+    def log_dict(
+        self,
+        dictionary:dict,
+        prog_bar: bool = False,
+        logger: Optional[bool] = None,
+        on_step: Optional[bool] = None,
+        on_epoch: Optional[bool] = None,
+        reduce_fx: Union[str, Callable] = "mean",
+        enable_graph: bool = False,
+        sync_dist: bool = False,
+        sync_dist_group: Optional[Any] = None,
+        add_dataloader_idx: bool = True,
+        batch_size: Optional[int] = None,
+        rank_zero_only: bool = False,
+    ) -> None:
+        d = {}
+        for k,v in dictionary.items():
+            if isinstance(v, torch.Tensor):
+                v = v.mean().clone().detach().cpu().numpy().item()  # noqa: PLW2901
 
+            if k not in self._buffer_dict:
+                self._buffer_dict[k] = []
+            self._buffer_dict[k].append(v)
+            if len(self._buffer_dict[k]) == 101:
+                (self._buffer_dict[k]).pop(0)
+            d[k] = np.mean(np.array(self._buffer_dict[k])).item()
+
+        super().log_dict(
+            d,
+            prog_bar,
+            logger,
+            on_step,
+            on_epoch,
+            reduce_fx,
+            enable_graph,
+            sync_dist,
+            sync_dist_group,
+            add_dataloader_idx,
+            batch_size,
+            rank_zero_only
+        )
     @torch.no_grad()
     def validation_step(self, batch, batch_idx):  # noqa: ARG002
         _, loss_dict_no_ema = self.shared_step(batch)
@@ -643,13 +686,15 @@ class LatentDiffusion(DDPM):
                     xc = super().get_input(batch, cond_key).to(self.device)
             else:
                 xc = x
+            c = xc
             if not self.cond_stage_trainable or force_c_encode:
                 c = self.get_learned_conditioning(xc) if isinstance(xc, (dict, list)) else self.get_learned_conditioning(xc.to(self.device))
+                if bs is not None:
+                    c = c[:bs]
             else:
                 c = xc
-            if bs is not None:
-                c = c[:bs]
-
+                for k,v in c.items():
+                    c[k] = v[:bs]
             if self.use_positional_encodings:
                 pos_x, pos_y = self.compute_latent_shifts(batch)
                 ckey = __conditioning_keys__[self.model.conditioning_key]
@@ -826,7 +871,8 @@ class LatentDiffusion(DDPM):
         if self.model.conditioning_key is not None:
             assert cond is not None
             if self.cond_stage_trainable:
-                cond = self.get_learned_conditioning(cond)
+                c = self.get_learned_conditioning(cond)
+                cond[self.model.conditioning_key] = c
             if self.shorten_cond_schedule:  # TODO: drop this option
                 raise NotImplementedError("No longer supported")
                 # tc = self.cond_ids[t].to(self.device)
@@ -844,6 +890,7 @@ class LatentDiffusion(DDPM):
             cond = {key: cond}
 
         if hasattr(self, "split_input_params"):
+            raise NotImplementedError()
             assert len(cond) == 1  # todo can only deal with one conditioning atm
             assert not return_ids
             ks = self.split_input_params["ks"]  # eg. (128, 128)
@@ -870,6 +917,7 @@ class LatentDiffusion(DDPM):
                 cond_list = [{c_key: [c[:, :, :, :, i]]} for i in range(c.shape[-1])]
 
             elif self.cond_stage_key == "coordinates_bbox":
+                raise NotImplementedError()
                 assert "original_image_size" in self.split_input_params, "BoundingBoxRescaling is missing original_image_size"
 
                 # assuming padding of unfold is always 0 and its dilation is always 1
@@ -1244,6 +1292,7 @@ class LatentDiffusion(DDPM):
 
         log = {}
         z, c, x, xrec, xc = self.get_input(batch, self.first_stage_key, return_first_stage_outputs=True, force_c_encode=True, return_original_cond=True, bs=N)
+        c = c["enc"]
         N = min(x.shape[0], N)
         n_row = min(x.shape[0], n_row)
         log["inputs"] = x  # imge input
@@ -1366,7 +1415,9 @@ class LatentDiffusion(DDPM):
 class DiffusionWrapper(pl.LightningModule):
     def __init__(self, diff_model_config, conditioning_key):
         super().__init__()
-        self.diffusion_model = instantiate_from_config(diff_model_config)
+        from ldm.modules.diffusionmodules import openaimodel
+
+        self.diffusion_model: openaimodel.UNetModel = instantiate_from_config(diff_model_config)
         self.conditioning_key = conditioning_key
         assert self.conditioning_key in [None, "concat", "crossattn", "hybrid", "adm"]
 

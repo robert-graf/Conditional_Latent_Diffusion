@@ -17,6 +17,7 @@
         "ckptdir",
         "conditionings",
         "contperceptual",
+        "convs",
         "crossattn",
         "dataroot",
         "ddconfig",
@@ -71,6 +72,7 @@
         "VQLPIPS",
         "vqperceptual",
         "vqvae",
+        "xformers",
         "xrec",
         "xstart"
     ]

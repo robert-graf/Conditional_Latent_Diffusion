@@ -1,0 +1,58 @@
+model:
+  base_learning_rate: 0.00001
+  target: cldm.cldm.ControlLDM_from_LDM
+  sd_locked: True
+  only_mid_control: False
+  params:
+    #linear_start: 0.00085
+    #linear_end: 0.0120
+    #num_timesteps_cond: 1
+    #log_every_t: 200
+    #timesteps: 1000
+    #first_stage_key: "jpg"
+    #cond_stage_key: "txt"
+    control_key: "c_concat" # Image for control net
+    #image_size: 64
+    #channels: 4
+    #cond_stage_trainable: false
+    #conditioning_key: crossattn
+    #monitor: val/loss_simple_ema
+    #scale_factor: 0.18215
+    #use_ema: False
+    only_mid_control: False
+    ldm_config_path: logs/2024-10-22T10-28-14_T2w_2_ct_32x32_degen_uncond/configs/config.yaml
+    ldm_ckpt_path: logs/2024-10-22T10-28-14_T2w_2_ct_32x32_degen_uncond/checkpoints/last.ckpt
+    
+    hint_channels: 1
+
+data:
+  target: main.DataModuleFromConfig
+  
+  params:
+    batch_size: 16
+    wrap: True
+    num_workers: 16 # Depends on the maschien
+    train:
+      target: ldm.data.T2w_2_CT.ImageSRTrain
+      params:
+        size: 256
+        image_dropout: 0.1
+        vflip: True
+        hflip: True
+        dflip: True
+        rotation: 45
+        noise: 0.3
+        noise_factor: 0.1
+        blur: 0.25
+        gauss : 0.25
+        random_zoom: True
+        zoom_min: 0.8
+        zoom_max: 1.2
+    validation:
+      target: ldm.data.T2w_2_CT.ImageSRValidation
+      params:
+        size: 256
+        image_dropout: 0.0
+
+trainer:
+  max_epochs: 10000

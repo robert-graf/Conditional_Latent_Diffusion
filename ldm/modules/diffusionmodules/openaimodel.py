@@ -75,7 +75,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
             if isinstance(layer, TimestepBlock):
                 x = layer(x, emb)
             elif isinstance(layer, SpatialTransformer):
-                x = layer(x, context, first)
+                x = layer(x, context)
             else:
                 x = layer(x)
         return x
@@ -481,7 +481,9 @@ class UNetModel(nn.Module):
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
         self.predict_codebook_ids = n_embed is not None
-
+        self.context_dim = context_dim
+        self.use_spatial_transformer = use_spatial_transformer
+        self.transformer_depth = transformer_depth
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
             linear(model_channels, time_embed_dim),
@@ -614,7 +616,7 @@ class UNetModel(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps=None, context=None, y=None, **_kwargs):
+    def forward(self, x, timesteps=None, context=None, y=None):  # **_kwargs
         """
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.

@@ -202,7 +202,7 @@ class DDIMSampler:
         unconditional_conditioning=None,
     ):
         b, *_, device = *x.shape, x.device
-
+        assert isinstance(condition,dict), type(condition)
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.0:
             e_t = self.model.apply_model(x, t, condition)
         else:

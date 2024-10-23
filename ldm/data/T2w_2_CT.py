@@ -31,6 +31,9 @@ class ImageSR(Dataset):
         noise_factor=0,
         noise=0,
         blur=0,
+        random_zoom=False,
+        zoom_min=0.8,
+        zoom_max=1.2,
     ):
         """
         Super-resolution Dataloader
@@ -100,6 +103,9 @@ class ImageSR(Dataset):
         self.blur = blur
         self.noise = noise
         self.noise_factor = noise_factor
+        self.random_zoom = random_zoom
+        self.zoom_min = zoom_min
+        self.zoom_max = zoom_max
         self.condition_types = ["T2", "CT"]
 
     def load_file(self, i):
@@ -167,18 +173,20 @@ class ImageSR(Dataset):
             assert cond_img_list[0].shape == i.shape, f"Shape mismatch {cond_img_list[0].shape} {i.shape} "
 
         second_img = torch.cat(cond_img_list, dim=0)
-
+        # Random zoom (RandomResizedCrop)
+        if self.random_zoom:
+            scale = (self.zoom_min, self.zoom_max)
+            target = transforms.RandomResizedCrop(self.size, scale=scale)(target)
+            second_img = transforms.RandomResizedCrop(self.size, scale=scale)(second_img)
         # Padding
         w, h = target.shape[-2], target.shape[-1]
         hp = max((self.size[0] - w) / 2, 0)
         vp = max((self.size[1] - h) / 2, 0)
         padding = [int(floor(vp)), int(floor(hp)), int(ceil(vp)), int(ceil(hp))]
-
         if self.rotation:
             angle = random.uniform(-self.rotation, self.rotation)  # Random rotation within range
             target = tf.rotate(target, angle, tf.InterpolationMode.BILINEAR)
             second_img = tf.rotate(second_img, angle)
-
         target = tf.pad(target, padding, padding_mode=self.padding)
         second_img = tf.pad(second_img, padding, padding_mode=self.padding)
 
@@ -224,7 +232,14 @@ class ImageSR(Dataset):
 
         dict_mods = self.load_file(i)
         target, condition = self.transform(dict_mods, flip)
-        example = {"image": target, "LR_image": target, "c_concat": condition, "n_crossattn": condition}
+        example = {
+            "image": target,
+            "LR_image": target,
+            "c_concat": condition,
+            "n_crossattn": condition,
+            "class_label": int(flip),
+            "human_label": self.condition_types[-1] if flip else self.condition_types[0],
+        }
         return example
 
 
