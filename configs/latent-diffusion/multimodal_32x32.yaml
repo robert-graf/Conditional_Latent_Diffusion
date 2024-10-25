@@ -10,17 +10,17 @@ model:
     first_stage_key: image
     cond_stage_key: class_label # Produced by the dataset
     image_size: 32 #After downscale (A)
-    channels: 4 #After downscale (B without concat; is used to creat the random noise for sampling)
+    channels: 4 #After downscale (B without concat; is used to create the random noise for sampling)
     cond_stage_trainable: true # We do not want the encoder to be trained.
-    conditioning_key: crossattn #crossattn # hybrid,crossattn,concat
+    conditioning_key: crossattn # hybrid,crossattn,concat
     monitor: val/loss
     use_ema: True    
-    #scale_factor: 0.18215 defaut = 1 
+    #scale_factor: 0.18215 default = 1 
     
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
       params:
-        image_size: 32 #(A) Dependen on first stage
+        image_size: 8 #(A) Dependen on first stage
         in_channels: 4 # 8 - concat #(B+concat) Dependen on first stage
         out_channels: 4 #(B)
         model_channels: 192
@@ -39,13 +39,10 @@ model:
       config_path: logs/2024-09-25T12-05-27_autoencoder_kl_32x32x4_gray/autoencoder_kl_32x32x4_gray.yaml
       ckpt_path: logs/2024-09-25T12-05-27_autoencoder_kl_32x32x4_gray/checkpoints/last.ckpt
     
-    #cond_stage_config:
-    #  config_path: logs/2024-09-25T12-05-27_autoencoder_kl_32x32x4_gray/autoencoder_kl_32x32x4_gray.yaml
-    #  ckpt_path: logs/2024-09-25T12-05-27_autoencoder_kl_32x32x4_gray/checkpoints/last.ckpt
     cond_stage_config:
       target: ldm.modules.encoders.modules.ClassEmbedder
       params:
-        n_classes: 2
+        n_classes: 28
         embed_dim: 512
         key: class_label
 
@@ -57,26 +54,24 @@ data:
     wrap: True
     num_workers: 16 # Depends on the machine
     train:
-      target: ldm.data.T2w_2_CT.ImageSRTrain
+      target: ldm.data.multimodal.ImageSRTrain
       params:
         size: 256
-        image_dropout: 0.1
         vflip: True
         hflip: True
         dflip: True
-        rotation: 45
-        noise: 0.3
-        noise_factor: 0.1
-        blur: 0.25
-        gauss : 0.25
+        rotation: 20
         random_zoom: True
         zoom_min: 0.8
         zoom_max: 1.2
+        gray: True
+        class_labels: True
     validation:
-      target: ldm.data.T2w_2_CT.ImageSRValidation
+      target: ldm.data.multimodal.ImageSRValidation
       params:
         size: 256
-        image_dropout: 0.0
+        gray: True
+        class_labels: True
 
 trainer:
   max_epochs: 10000

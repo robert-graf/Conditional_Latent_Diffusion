@@ -27,9 +27,12 @@ class ClassEmbedder(nn.Module):
         if key is None:
             key = self.key
         # this is for use in crossattn
-        assert isinstance(batch,dict), type(batch)
-        assert key in batch, f"Key missing {list(batch.keys())} - {batch.get('c_crossattn',[{}])[0]}"
-        c = batch[key][:, None]
+        assert isinstance(batch, dict), type(batch)
+        assert key in batch, f"{key=} missing {list(batch.keys())} - {batch.get('c_crossattn',[{}])[0]}"
+        c = batch[key]
+        if isinstance(c, list):
+            c = c[0]
+        c = c[:, None]
         c = self.embedding(c)
         return c
 

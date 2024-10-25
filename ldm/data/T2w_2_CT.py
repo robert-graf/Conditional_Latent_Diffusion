@@ -34,6 +34,7 @@ class ImageSR(Dataset):
         random_zoom=False,
         zoom_min=0.8,
         zoom_max=1.2,
+        use_multi_class_class_label=False,
     ):
         """
         Super-resolution Dataloader
@@ -66,7 +67,12 @@ class ImageSR(Dataset):
         dataset_path = "/media/data/robert/datasets/t2w_ct/" + ("train" if not validation else "val")
 
         buffer_path = os.path.join(dataset_path, ".buffer.pkl")
-
+        self.use_multi_class_class_label = use_multi_class_class_label
+        if use_multi_class_class_label:
+            labels_pkl = os.path.join("/media/data/robert/datasets/multimodal_large/", "labels.pkl")
+            with open(labels_pkl, "rb") as f:
+                self.labels_name: list = pickle.load(f)
+            self.class_idx = [self.labels_name.index("T2w"), self.labels_name.index("ct")]
         # Check if the buffer file exists
         if os.path.exists(buffer_path):
             # Load the buffer file
@@ -121,6 +127,9 @@ class ImageSR(Dataset):
                     return self.load_file(i + 123)
                 if self.norm:
                     dict_mods[k] /= max(float(np.max(dict_mods[k])), 0.0000001)
+                assert float(np.max(dict_mods[k])) <= 1, (np.min(dict_mods[k]), np.max(dict_mods[k]))
+                assert float(np.min(dict_mods[k])) >= 0, (np.min(dict_mods[k]), np.max(dict_mods[k]))
+                # TODO round to 255?
             f.close()  # type: ignore
             return dict_mods
         raise AssertionError("Expected a .npz file")
@@ -232,14 +241,18 @@ class ImageSR(Dataset):
 
         dict_mods = self.load_file(i)
         target, condition = self.transform(dict_mods, flip)
+        class_label = int(flip)
+        if self.use_multi_class_class_label:
+            class_label = self.class_idx[flip]
         example = {
             "image": target,
-            "LR_image": target,
-            "c_concat": condition,
-            "n_crossattn": condition,
-            "class_label": int(flip),
+            "condition": condition,
+            # "class_label": condition,
+            "class_label": class_label,
+            # "c_crossattn": condition,
             "human_label": self.condition_types[-1] if flip else self.condition_types[0],
         }
+
         return example
 
 
