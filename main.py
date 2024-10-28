@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytorch_lightning as pl
+import torch
 from omegaconf import OmegaConf
 from packaging import version
 from PIL import Image
@@ -16,6 +17,8 @@ from ldm.arguments import DataModuleFromConfig, TrainSettings, get_parser, nonde
 from ldm.callbacks import CUDACallback, ImageLogger, SetupCallback
 from ldm.data.base import Txt2ImgIterableBaseDataset
 from ldm.util import instantiate_from_config
+
+torch.multiprocessing.set_sharing_strategy("file_system")
 
 
 def default_config(trainer_kwargs, lightning_config, ckptdir):

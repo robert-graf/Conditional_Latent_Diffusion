@@ -50,6 +50,8 @@ class ImageSR(Dataset):
 
         self.size = (size, size)
         dataset_path = "/media/data/robert/datasets/multimodal_large/"
+        if os.path.exists('/DATA/NAS/datasets_processed/Natural/multimodal_large/'):
+            dataset_path = '/DATA/NAS/datasets_processed/Natural/multimodal_large/'
         labels_pkl = os.path.join(dataset_path, "labels.pkl")
 
         if not os.path.exists(labels_pkl):
